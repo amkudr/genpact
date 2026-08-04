@@ -23,8 +23,8 @@ The application uses LangGraph to manage state and route execution through sever
     "fontFamily": "Inter, ui-sans-serif, system-ui"
   }
 }}%%
-flowchart LR
-    User(["User\nQuestion"]):::io --> N1
+flowchart TB
+    User(["User\nQuestion"]):::io
 
     subgraph Pipeline ["LangGraph Pipeline — app.graph"]
         direction LR
@@ -36,12 +36,13 @@ flowchart LR
         N3 -->|"Invalid"| N2
     end
 
-    N5 --> Answer(["Final\nAnswer"]):::io
-
+    Answer(["Final\nAnswer"]):::io
     LLM[("LLM\napp.services")]:::external
     DB[("SQL DB\napp.db")]:::external
     Tracing["app.tracing\nLangSmith"]:::tracing
 
+    User --> N1
+    N5 --> Answer
     N2 -. "NL→SQL" .-> LLM
     N5 -. "results→answer" .-> LLM
     N4 -. "query" .-> DB
