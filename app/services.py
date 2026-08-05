@@ -84,7 +84,7 @@ ANSWER_FORMAT_PROMPT = ChatPromptTemplate.from_messages([
 # Section 3 — LLM implementations
 # ---------------------------------------------------------------------------
 
-class RealLLM:
+class LLM:
     """Wraps ChatOpenAI and calls the two prompts via LangChain chains."""
 
     def __init__(self, model: str = "gpt-4o-mini", temperature: float = 0.0) -> None:
@@ -120,39 +120,18 @@ class RealLLM:
         }).strip()
 
 
-class _MockLLM:
-    """Deterministic stub — used by tests that patch get_llm().
 
-    Returns a valid SELECT that the real in-memory SQLite DB can execute,
-    producing ≥ 1 rows for the standard 'grade A' question so all assertions
-    in test_flow.py pass without touching the OpenAI API.
-    """
-
-    _SQL = (
-        "SELECT s.name AS student, c.title AS course, e.grade "
-        "FROM enrollments e "
-        "JOIN students  s ON s.id = e.student_id "
-        "JOIN offerings o ON o.id = e.offering_id "
-        "JOIN courses   c ON c.id = o.course_id "
-        "WHERE e.grade = 'A'"
-    )
-
-    def generate_sql(self, question: str, error: str | None = None) -> str:  # noqa: ARG002
-        return self._SQL
-
-    def format_answer(self, question: str, rows: list[dict]) -> str:  # noqa: ARG002
-        return f"Found {len(rows)} result(s) for: '{question}'."
 
 
 # ---------------------------------------------------------------------------
 # Section 4 — Public factory
 # ---------------------------------------------------------------------------
 
-def get_llm() -> RealLLM:
+def get_llm() -> LLM:
     """Return the production LLM client.
 
     Tests should patch this function:
         with patch("app.services.get_llm", return_value=_MockLLM()):
             ...
     """
-    return RealLLM()
+    return LLM()
