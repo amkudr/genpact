@@ -1,26 +1,107 @@
 """
-app.graph — LangGraph pipeline
-
-Responsibilities:
-  - Define the shared agent state (a TypedDict that flows through every node).
-  - Declare each graph node as a plain Python function that accepts and returns
-    the state dict.
-  - Wire nodes and edges into a compiled LangGraph StateGraph.
-  - Expose a single `run(question: str) -> dict` entry-point used by callers.
-
-Nodes (planned, in execution order):
-  1. parse_question   — attach the raw question to state; detect obvious errors.
-  2. generate_sql     — call the LLM (via services.py) to produce a SQL query.
-  3. validate_sql     — check the SQL is a safe SELECT before touching the DB.
-  4. execute_sql      — run the validated query via db.py; store rows in state.
-  5. format_answer    — call the LLM again to turn raw rows into a human answer.
-
-Routing:
-  - After validate_sql: if validation fails → loop back to generate_sql (up to N
-    retries), then surface an error to the user.
-  - After execute_sql: if DB returns no rows → short-circuit to format_answer
-    with an "empty result" signal so the LLM can say "no results found".
-
-This module must NOT import app.services directly; the LLM callable is injected
-via the graph's config dict so that tests can swap in a stub.
+app.graph — LangGraph pipeline (Phase 1: skeleton nodes)
 """
+
+from typing import TypedDict, Optional
+from langgraph.graph import StateGraph, END
+
+from app import db, services
+
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+class AgentState(TypedDict):
+    question: str
+    sql:      Optional[str]
+    rows:     Optional[list]
+    answer:   Optional[str]
+    error:    Optional[str]
+
+
+# ---------------------------------------------------------------------------
+# Nodes (skeletons — bodies to be filled one-by-one)
+# ---------------------------------------------------------------------------
+
+def parse_question(state: AgentState) -> AgentState:
+    # TODO: parse intent, extract entities, detect obvious errors
+    return state
+
+
+def generate_sql(state: AgentState) -> AgentState:
+    # TODO: build real prompt and call llm.generate_sql(question)
+    llm = services.get_llm()
+    state["sql"] = llm.generate_sql(state["question"])
+    return state
+
+
+def validate_sql(state: AgentState) -> AgentState:
+    # TODO: real SQL validation (syntax + schema check)
+    state["error"] = None  # assume valid for now
+    return state
+
+
+def execute_sql(state: AgentState) -> AgentState:
+    # TODO: pass real SQL once generate_sql is implemented
+    state["rows"] = db.execute_readonly_sql(state["sql"])
+    return state
+
+
+def format_answer(state: AgentState) -> AgentState:
+    # TODO: build real prompt and call llm.format_answer(question, rows)
+    llm = services.get_llm()
+    state["answer"] = llm.format_answer(state["question"], state["rows"] or [])
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Routing
+# ---------------------------------------------------------------------------
+
+def route_after_validate(state: AgentState) -> str:
+    # TODO: return "generate_sql" on invalid SQL (with retry cap)
+    if state.get("error"):
+        return "generate_sql"
+    return "execute_sql"
+
+
+# ---------------------------------------------------------------------------
+# Graph assembly
+# ---------------------------------------------------------------------------
+
+def _build_graph() -> StateGraph:
+    g = StateGraph(AgentState)
+
+    g.add_node("parse_question", parse_question)
+    g.add_node("generate_sql",   generate_sql)
+    g.add_node("validate_sql",   validate_sql)
+    g.add_node("execute_sql",    execute_sql)
+    g.add_node("format_answer",  format_answer)
+
+    g.set_entry_point("parse_question")
+    g.add_edge("parse_question", "generate_sql")
+    g.add_edge("generate_sql",   "validate_sql")
+    g.add_conditional_edges("validate_sql", route_after_validate)
+    g.add_edge("execute_sql",    "format_answer")
+    g.add_edge("format_answer",  END)
+
+    return g.compile()
+
+
+_graph = _build_graph()
+
+
+# ---------------------------------------------------------------------------
+# Public entry-point
+# ---------------------------------------------------------------------------
+
+def run(question: str) -> dict:
+    initial_state: AgentState = {
+        "question": question,
+        "sql":      None,
+        "rows":     None,
+        "answer":   None,
+        "error":    None,
+    }
+    return _graph.invoke(initial_state)
