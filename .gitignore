@@ -6,3 +6,6 @@ HW_Task.pdf
 .venv
 .env
 .coverage
+architecture.md
+generate_graph.py
+langgraph_diagram.png
