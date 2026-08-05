@@ -5,7 +5,7 @@ app.graph — LangGraph pipeline (Phase 1: skeleton nodes)
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 
-from app import db, services
+from app import db, services, tracing
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,7 @@ class AgentState(TypedDict):
 
 def parse_question(state: AgentState) -> AgentState:
     # TODO: parse intent, extract entities, detect obvious errors
+    tracing.log_event(tracing.EVT_QUESTION, question=state["question"])
     return state
 
 
@@ -33,18 +34,24 @@ def generate_sql(state: AgentState) -> AgentState:
     # TODO: build real prompt and call llm.generate_sql(question)
     llm = services.get_llm()
     state["sql"] = llm.generate_sql(state["question"])
+    tracing.log_event(tracing.EVT_SQL_GENERATED, sql=state["sql"])
     return state
 
 
 def validate_sql(state: AgentState) -> AgentState:
     # TODO: real SQL validation (syntax + schema check)
     state["error"] = None  # assume valid for now
+    if state.get("error"):
+        tracing.log_event(tracing.EVT_SQL_INVALID, sql=state["sql"], error=state["error"])
+    else:
+        tracing.log_event(tracing.EVT_SQL_VALIDATED, sql=state["sql"])
     return state
 
 
 def execute_sql(state: AgentState) -> AgentState:
     # TODO: pass real SQL once generate_sql is implemented
     state["rows"] = db.execute_readonly_sql(state["sql"])
+    tracing.log_event(tracing.EVT_ROWS_RETURNED, row_count=len(state["rows"] or []))
     return state
 
 
@@ -52,6 +59,7 @@ def format_answer(state: AgentState) -> AgentState:
     # TODO: build real prompt and call llm.format_answer(question, rows)
     llm = services.get_llm()
     state["answer"] = llm.format_answer(state["question"], state["rows"] or [])
+    tracing.log_event(tracing.EVT_ANSWER_EMITTED, answer=state["answer"])
     return state
 
 
@@ -97,6 +105,7 @@ _graph = _build_graph()
 # ---------------------------------------------------------------------------
 
 def run(question: str) -> dict:
+    tracing.new_run()
     initial_state: AgentState = {
         "question": question,
         "sql":      None,
