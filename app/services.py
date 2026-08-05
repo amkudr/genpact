@@ -53,7 +53,8 @@ SQL_GENERATION_PROMPT = ChatPromptTemplate.from_messages([
         (
             "You are an expert SQLite query writer for a university database.\n"
             "Given a natural-language question, produce exactly ONE valid SQLite "
-            "SELECT statement — no markdown, no code fences, no explanation.\n\n"
+            "SELECT statement — no markdown, no code fences, no explanation.\n"
+            "If the question is completely unrelated to the database schema, output exactly: OUT_OF_DOMAIN\n\n"
             "Schema:\n{schema}"
         ),
     ),
@@ -70,12 +71,14 @@ ANSWER_FORMAT_PROMPT = ChatPromptTemplate.from_messages([
             "You are a helpful assistant that turns database query results into "
             "clear, concise natural-language answers. "
             "Use the raw rows provided and the original question to write a "
-            "short, direct answer. Do not mention SQL."
+            "short, direct answer. Do not mention SQL.\n"
+            "If an error is provided (e.g., 'Out of domain'), explain gracefully "
+            "that you cannot answer the question based on the university database."
         ),
     ),
     (
         "human",
-        "Question: {question}\n\nQuery results (list of dicts): {rows}\n\nAnswer:",
+        "Question: {question}\n\nError: {error}\n\nQuery results (list of dicts): {rows}\n\nAnswer:",
     ),
 ])
 
@@ -112,11 +115,12 @@ class LLM:
             "error":    error or "none",
         }).strip()
 
-    def format_answer(self, question: str, rows: list[dict]) -> str:
+    def format_answer(self, question: str, rows: list[dict], error: str | None = None) -> str:
         """Convert raw DB rows into a natural-language answer."""
         return self._answer_chain.invoke({
             "question": question,
             "rows":     rows,
+            "error":    error or "none",
         }).strip()
 
 

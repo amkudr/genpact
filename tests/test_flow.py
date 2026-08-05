@@ -33,7 +33,7 @@ class _MockLLM:
     def generate_sql(self, question: str, error: str | None = None) -> str:  # noqa: ARG002
         return self._SQL
 
-    def format_answer(self, question: str, rows: list[dict]) -> str:  # noqa: ARG002
+    def format_answer(self, question: str, rows: list[dict], error: str | None = None) -> str:  # noqa: ARG002
         return f"Found {len(rows)} result(s) for: '{question}'."
 
 
@@ -45,7 +45,7 @@ class _AlwaysInvalidLLM:
     def generate_sql(self, question: str, error=None) -> str:  # noqa: ARG002
         return "NOT VALID SQL AT ALL"
 
-    def format_answer(self, question: str, rows: list) -> str:  # noqa: ARG002
+    def format_answer(self, question: str, rows: list, error: str | None = None) -> str:  # noqa: ARG002
         return f"Could not retrieve results for: '{question}'."
 
 
