@@ -1,17 +1,17 @@
 import os
 from unittest.mock import patch, MagicMock
 import pytest
-from app.services import RealLLM, get_llm
+from app.services import LLM, get_llm
 
 def test_real_llm_missing_api_key():
     with patch.dict(os.environ, {}, clear=True):
         with pytest.raises(EnvironmentError, match="OPENAI_API_KEY is not set"):
-            RealLLM()
+            LLM()
 
 @patch("app.services.ChatOpenAI")
 def test_real_llm_methods(mock_chat):
     with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-        llm = RealLLM()
+        llm = LLM()
 
     # Mock invoke on chains to prevent actual LLM usage
     llm._sql_chain = MagicMock()
@@ -33,4 +33,4 @@ def test_real_llm_methods(mock_chat):
 def test_get_llm():
     with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
         llm = get_llm()
-        assert isinstance(llm, RealLLM)
+        assert isinstance(llm, LLM)

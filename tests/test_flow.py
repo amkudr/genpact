@@ -13,7 +13,28 @@ import pytest
 
 from app.graph import run
 from app import tracing
-from app.services import _MockLLM
+class _MockLLM:
+    """Deterministic stub — used by tests that patch get_llm().
+
+    Returns a valid SELECT that the real in-memory SQLite DB can execute,
+    producing ≥ 1 rows for the standard 'grade A' question so all assertions
+    in test_flow.py pass without touching the OpenAI API.
+    """
+
+    _SQL = (
+        "SELECT s.name AS student, c.title AS course, e.grade "
+        "FROM enrollments e "
+        "JOIN students  s ON s.id = e.student_id "
+        "JOIN offerings o ON o.id = e.offering_id "
+        "JOIN courses   c ON c.id = o.course_id "
+        "WHERE e.grade = 'A'"
+    )
+
+    def generate_sql(self, question: str, error: str | None = None) -> str:  # noqa: ARG002
+        return self._SQL
+
+    def format_answer(self, question: str, rows: list[dict]) -> str:  # noqa: ARG002
+        return f"Found {len(rows)} result(s) for: '{question}'."
 
 
 # ---------------------------------------------------------------------------
