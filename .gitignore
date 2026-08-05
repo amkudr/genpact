@@ -4,3 +4,4 @@ __pycache__/
 HW_Task.pdf
 .agents
 .venv
+.env

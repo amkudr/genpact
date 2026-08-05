@@ -76,4 +76,32 @@ flowchart TB
 
 ## Getting Started
 
-*(Add instructions on how to install dependencies and run the project here)*
+### 1 · Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 2 · Set up your API key
+
+> ⚠️ **Never open `.env` in an AI-assisted editor or share its contents.**
+
+```bash
+# Copy the safe template
+cp .env.example .env
+
+# Open .env in a plain text editor and replace the placeholder:
+#   OPENAI_API_KEY=your-openai-api-key-here
+```
+
+Your real `.env` is listed in `.gitignore` and will never be committed.  
+The committed [`.env.example`](.env.example) contains only safe placeholder values.
+
+### 3 · Run the agent
+```bash
+python main.py
+```
+
+### 4 · Run the test suite (no API key needed — LLM is mocked)
+```bash
+pytest tests/ -v
+```

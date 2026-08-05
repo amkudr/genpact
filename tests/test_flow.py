@@ -1,24 +1,41 @@
 """
 tests/test_flow.py — pytest integration tests for the LangGraph pipeline
+
+All tests mock app.services.get_llm so the test suite never makes real
+OpenAI API calls and remains fast + deterministic.
 """
 
 import io
 import json
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
 from app.graph import run
 from app import tracing
+from app.services import _MockLLM
 
 
 # ---------------------------------------------------------------------------
-# Shared fixture — run the pipeline once per module
+# Helper — a mock LLM that always returns invalid SQL (for retry-cap tests)
+# ---------------------------------------------------------------------------
+
+class _AlwaysInvalidLLM:
+    def generate_sql(self, question: str, error=None) -> str:  # noqa: ARG002
+        return "NOT VALID SQL AT ALL"
+
+    def format_answer(self, question: str, rows: list) -> str:  # noqa: ARG002
+        return f"Could not retrieve results for: '{question}'."
+
+
+# ---------------------------------------------------------------------------
+# Shared fixture — run the pipeline once per module (LLM is mocked)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
 def pipeline_result():
-    return run("Which students got an A in Database Systems in Spring 2024?")
+    with patch("app.services.get_llm", return_value=_MockLLM()):
+        return run("Which students got an A in Database Systems in Spring 2024?")
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +76,7 @@ def test_no_error_in_state(pipeline_result):
 # ---------------------------------------------------------------------------
 
 def test_answer_mentions_result_count(pipeline_result):
+    # _MockLLM.format_answer returns "Found N result(s) for: '...'."
     assert "result" in pipeline_result["answer"].lower()
 
 
@@ -83,8 +101,9 @@ EXPECTED_EVENTS = [
 def captured_log_records():
     """Run the pipeline with stderr captured; return parsed JSON records."""
     buf = io.StringIO()
-    with patch("sys.stderr", buf):
-        run("Which students got an A in Database Systems in Spring 2024?")
+    with patch("app.services.get_llm", return_value=_MockLLM()):
+        with patch("sys.stderr", buf):
+            run("Which students got an A in Database Systems in Spring 2024?")
     buf.seek(0)
     records = []
     for line in buf:
@@ -121,7 +140,30 @@ def test_all_log_records_have_run_id(captured_log_records):
     "🤔 what is the answer?",   # unicode
 ])
 def test_run_does_not_raise(question):
-    try:
-        run(question)
-    except Exception as exc:
-        pytest.fail(f"run({question!r:.40}) raised unexpectedly: {exc}")
+    with patch("app.services.get_llm", return_value=_MockLLM()):
+        try:
+            run(question)
+        except Exception as exc:
+            pytest.fail(f"run({question!r:.40}) raised unexpectedly: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Retry-cap — pipeline must not raise and must return an answer even when
+# the LLM always produces invalid SQL (graceful degradation path)
+# ---------------------------------------------------------------------------
+
+def test_sql_retry_cap_does_not_raise():
+    """When the LLM always returns invalid SQL the pipeline degrades gracefully."""
+    with patch("app.services.get_llm", return_value=_AlwaysInvalidLLM()):
+        result = run("Which students got an A?")
+    assert isinstance(result, dict)
+    assert "answer" in result
+    assert isinstance(result["answer"], str)
+    assert len(result["answer"]) > 0
+
+
+def test_sql_retry_cap_returns_empty_rows():
+    """After exhausting retries, rows should be empty (not None)."""
+    with patch("app.services.get_llm", return_value=_AlwaysInvalidLLM()):
+        result = run("Which students got an A?")
+    assert result.get("rows") == []
