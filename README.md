@@ -2,6 +2,47 @@
 
 A minimal, high-quality question-answering system using LangGraph and LangSmith to translate natural language questions into SQL queries, execute them against a database, and return a human-readable answer.
 
+## Database Schema
+
+The agent operates over an in-memory SQLite university database (defined in [`app/db.py`](file:///Users/anmkudr/Projects/Genpact%20project/app/db.py)).
+
+```mermaid
+erDiagram
+    courses {
+        INTEGER id PK
+        TEXT code
+        TEXT title
+        INTEGER credits
+    }
+    teachers {
+        INTEGER id PK
+        TEXT name
+        TEXT department
+    }
+    offerings {
+        INTEGER id PK
+        INTEGER course_id FK
+        INTEGER teacher_id FK
+        TEXT semester
+        INTEGER year
+    }
+    students {
+        INTEGER id PK
+        TEXT name
+        TEXT email
+    }
+    enrollments {
+        INTEGER id PK
+        INTEGER student_id FK
+        INTEGER offering_id FK
+        TEXT grade
+    }
+
+    courses ||--o{ offerings : "scheduled as"
+    teachers ||--o{ offerings : "teaches"
+    offerings ||--o{ enrollments : "includes"
+    students ||--o{ enrollments : "enrolled in"
+```
 ## Module Flow Diagram
 
 The application uses LangGraph to manage state and route execution through several nodes. The following diagram shows the high-level architecture and how data flows between the modules.
@@ -57,14 +98,14 @@ flowchart TB
 
 ### Pipeline Step Descriptions
 
-| Step | Node | Description |
-|------|------|-------------|
-| 1 | `parse_question` | Parses the user's natural language question to extract intent, entities (students, courses, teachers), filters, and constraints. |
-| 2 | `generate_sql` | Uses the LLM to translate the structured intent into a SQL query tailored to the university database schema. |
-| 3 | `validate_sql` | Checks the generated SQL for syntax correctness and schema compatibility. If invalid, loops back to Step 2 for a retry. |
-| 4 | `execute_sql` | Runs the validated SQL query against the database and retrieves the raw result set. |
-| 5 | `format_answer` | Uses the LLM to convert the raw DB results into a clear, human-readable natural language answer. |
-| — | `app.tracing` | LangSmith observer that traces the full execution path: User Input → Nodes → SQL → DB Results → Final Answer. |
+| Step | Node             | Description                                                                                                                      |
+| ---- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `parse_question` | Parses the user's natural language question to extract intent, entities (students, courses, teachers), filters, and constraints. |
+| 2    | `generate_sql`   | Uses the LLM to translate the structured intent into a SQL query tailored to the university database schema.                     |
+| 3    | `validate_sql`   | Checks the generated SQL for syntax correctness and schema compatibility. If invalid, loops back to Step 2 for a retry.          |
+| 4    | `execute_sql`    | Runs the validated SQL query against the database and retrieves the raw result set.                                              |
+| 5    | `format_answer`  | Uses the LLM to convert the raw DB results into a clear, human-readable natural language answer.                                 |
+| —    | `app.tracing`    | LangSmith observer that traces the full execution path: User Input → Nodes → SQL → DB Results → Final Answer.                    |
 
 ## Project Structure
 
@@ -82,9 +123,6 @@ pip install -r requirements.txt
 ```
 
 ### 2 · Set up your API key
-
-> ⚠️ **Never open `.env` in an AI-assisted editor or share its contents.**
-
 ```bash
 # Copy the safe template
 cp .env.example .env
@@ -101,7 +139,14 @@ The committed [`.env.example`](.env.example) contains only safe placeholder valu
 python main.py
 ```
 
-### 4 · Run the test suite (no API key needed — LLM is mocked)
+### 4 · Run the test suite
+
+**Fast Unit Tests** (No API key needed — LLM is mocked):
 ```bash
 pytest tests/ -v
+```
+
+**End-to-End Tests** (Tests live OpenAI API with complex queries):
+```bash
+RUN_E2E=true pytest tests/test_e2e.py -v -s
 ```

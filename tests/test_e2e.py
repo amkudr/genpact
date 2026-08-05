@@ -8,41 +8,69 @@ load_dotenv()
 
 # We only run this test if the developer explicitly sets RUN_E2E=true and has an API key.
 # This prevents accidentally using up tokens during normal test runs.
-@pytest.mark.skipif(
+pytestmark = pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY") or os.environ.get("RUN_E2E", "false").lower() != "true",
     reason="True E2E tests require both OPENAI_API_KEY and RUN_E2E=true environment variables"
 )
-def test_full_pipeline_e2e():
+
+E2E_QUESTIONS = [
+    (
+        "Which students got an A in Database Systems in Spring 2024?",
+        "alice",  # expected keyword in answer
+        True,     # expect rows from DB
+        False     # expect error
+    ),
+    (
+        "How many total enrollments were there in Spring 2024?",
+        "3",      # expecting count of 3
+        True,
+        False
+    ),
+    (
+        "What is the name of the teacher who taught the student Carol White?",
+        "patel",  # Dr. Patel
+        True,
+        False
+    ),
+    (
+        "Who is living in Paris?",
+        "university",  # polite refusal should mention 'university' database
+        False,         # no rows executed
+        True           # expect error handling to trigger
+    )
+]
+
+@pytest.mark.parametrize("question, expected_keyword, expect_rows, expect_error", E2E_QUESTIONS)
+def test_full_pipeline_e2e(question, expected_keyword, expect_rows, expect_error):
     """
     A true End-to-End test that hits the live OpenAI API.
-    It verifies the entire pipeline: 
+    It verifies the entire pipeline for different complex query types:
     LLM (SQL Generation) -> DB execution -> LLM (Answer Generation).
     """
+    print(f"\n--- Testing: {question} ---")
+    
     # Act
-    question = "Which students got an A in Database Systems in Spring 2024?"
     result = run(question)
     
-    # Assert
-    print("\n--- Verifying Pipeline Results ---")
-    
-    print("1. Checking if 'answer' key exists...")
+    # Assert format
     assert "answer" in result, "The pipeline should return an answer."
-    print("   ✓ Confirmed: Answer key exists.")
-    
-    print("2. Checking if 'sql' key exists...")
     assert "sql" in result, "The pipeline should include the generated SQL."
-    print(f"   ✓ Confirmed: Generated SQL is: {result['sql']}")
     
-    print("3. Checking for pipeline errors...")
-    assert not result.get("error"), f"There should be no errors, but got: {result.get('error')}"
-    print("   ✓ Confirmed: No errors occurred.")
-    
-    print("4. Checking database rows returned...")
-    rows = result.get("results", result.get("rows", []))
-    assert len(rows) > 0, "The query should return at least one DB row."
-    print(f"   ✓ Confirmed: Retrieved {len(rows)} row(s) from the database.")
-    
-    print("5. Checking if final answer mentions 'Alice'...")
+    # Assert Error Handling
+    if expect_error:
+        assert result.get("error"), "Expected an error for out-of-domain questions."
+        assert result["sql"].strip() == "OUT_OF_DOMAIN", f"LLM should output OUT_OF_DOMAIN, got {result['sql']}"
+    else:
+        assert not result.get("error"), f"Unexpected error: {result.get('error')}"
+        
+    # Assert DB Rows
+    rows = result.get("rows", [])
+    if expect_rows:
+        assert len(rows) > 0, f"The query should return at least one DB row. SQL was: {result['sql']}"
+    else:
+        assert len(rows) == 0, "The query should not return any rows."
+        
+    # Assert LLM Final Answer Quality
     answer = result["answer"].lower()
-    assert "alice" in answer, "The LLM's final answer should mention the student Alice."
-    print(f"   ✓ Confirmed: Answer contains 'Alice'. Full answer: {result['answer']}\n")
+    assert expected_keyword.lower() in answer, f"Expected '{expected_keyword}' in answer, got: {result['answer']}"
+    print(f"✓ Success! Answer: {result['answer']}")

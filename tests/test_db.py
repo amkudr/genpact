@@ -114,3 +114,43 @@ def test_join_excludes_carol(grade_a_rows):
 
 def test_join_all_grades_are_a(grade_a_rows):
     assert all(r["grade"] == "A" for r in grade_a_rows)
+
+
+# ---------------------------------------------------------------------------
+# Aggregation query (Requirement: averages, counts)
+# ---------------------------------------------------------------------------
+
+AGGREGATION_QUERY = """
+    SELECT COUNT(e.id) AS total_enrollments
+    FROM   enrollments e
+    JOIN   offerings o ON o.id = e.offering_id
+    WHERE  o.semester = 'Spring'
+      AND  o.year     = 2024
+"""
+
+def test_aggregation_returns_correct_count():
+    rows = execute_readonly_sql(AGGREGATION_QUERY)
+    assert len(rows) == 1
+    # DATA dict has 3 enrollments total, all in Spring 2024
+    assert rows[0]["total_enrollments"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Multi-step reasoning (Requirement: complex joins across domains)
+# "Find the teacher who taught Carol White"
+# ---------------------------------------------------------------------------
+
+MULTI_STEP_QUERY = """
+    SELECT DISTINCT t.name AS teacher
+    FROM   teachers t
+    JOIN   offerings o   ON o.teacher_id = t.id
+    JOIN   enrollments e ON e.offering_id = o.id
+    JOIN   students s    ON s.id = e.student_id
+    WHERE  s.name = 'Carol White'
+"""
+
+def test_multi_step_reasoning_returns_correct_teacher():
+    rows = execute_readonly_sql(MULTI_STEP_QUERY)
+    assert len(rows) == 1
+    # Carol White is in offering 2, taught by teacher 2 (Dr. Patel)
+    assert rows[0]["teacher"] == "Dr. Patel"
