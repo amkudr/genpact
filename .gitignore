@@ -5,3 +5,4 @@ HW_Task.pdf
 .agents
 .venv
 .env
+.coverage

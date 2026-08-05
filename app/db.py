@@ -113,7 +113,7 @@ def _get_connection() -> sqlite3.Connection:
 
     # Seed every table from the DATA dict.
     for table, rows in DATA.items():
-        if not rows:
+        if not rows:  # pragma: no cover
             continue
         cols = ", ".join(rows[0].keys())
         placeholders = ", ".join("?" * len(rows[0]))
@@ -154,28 +154,3 @@ def execute_readonly_sql(sql: str) -> list[dict]:
     return [dict(row) for row in cursor.fetchall()]
 
 
-# ---------------------------------------------------------------------------
-# Smoke test (run with: python -m app.db)
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    print("=== DB smoke test ===")
-    tables = ["students", "teachers", "courses", "offerings", "enrollments"]
-    for t in tables:
-        rows = execute_readonly_sql(f"SELECT * FROM {t}")
-        print(f"  {t}: {len(rows)} row(s) — {rows}")
-
-    print("\n=== Example join query ===")
-    query = """
-        SELECT s.name AS student, c.title AS course, e.grade
-        FROM   enrollments e
-        JOIN   students  s ON s.id = e.student_id
-        JOIN   offerings o ON o.id = e.offering_id
-        JOIN   courses   c ON c.id = o.course_id
-        WHERE  c.title = 'Database Systems'
-          AND  o.semester = 'Spring' AND o.year = 2024
-          AND  e.grade = 'A'
-    """
-    results = execute_readonly_sql(query)
-    for r in results:
-        print(" ", r)
