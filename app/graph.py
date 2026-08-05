@@ -76,6 +76,12 @@ def validate_sql(state: AgentState) -> AgentState:
     """
     sql = state.get("sql") or ""
 
+    if sql.strip() == "OUT_OF_DOMAIN":
+        state["error"] = "Out of domain question. Only university-related queries are supported."
+        state["retry_count"] = MAX_RETRIES  # Exhaust retries instantly to prevent looping
+        tracing.log_event(tracing.EVT_SQL_INVALID, sql=sql, error=state["error"])
+        return state
+
     # Guard: must start with SELECT (defence-in-depth on top of db layer).
     if not sql.strip().upper().startswith("SELECT"):
         state["error"] = "Generated statement is not a SELECT."
@@ -122,6 +128,7 @@ def format_answer(state: AgentState) -> AgentState:
     state["answer"] = llm.format_answer(
         question=state["question"],
         rows=rows,
+        error=state.get("error"),
     )
     tracing.log_event(tracing.EVT_ANSWER_EMITTED, answer=state["answer"])
     return state
